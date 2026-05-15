@@ -1,0 +1,25 @@
+# oapi-codegen configuration for the public Go SDK.
+#
+# The input spec is the SAME snapshot the CLI builds from
+# (cli/openapi/v1.json) — single source of truth for everything
+# generated against the TrafficMorph v1 API. Keeping one snapshot
+# means a server-side schema change can only land via the
+# OpenApiSpecSnapshotTest refresh, and both the CLI and SDK pick it
+# up together (regen them in the same PR).
+#
+# Why not split into two snapshots? The CLI is technically a
+# downstream consumer of this SDK; duplicating the snapshot would
+# introduce a drift window where one is regenerated and the other
+# isn't.
+#
+# Regen sequence:
+#   make -C cli regen-spec         (writes ../cli/openapi/v1.json + v1.yaml)
+#   make -C sdk-go regen-client    (this config, against ../cli/openapi/v1.json)
+#   make -C cli   regen-client     (CLI's own internal client)
+package: api
+generate:
+  models: true
+  client: true
+output: api/client.gen.go
+output-options:
+  skip-prune: false
