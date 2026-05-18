@@ -6,7 +6,7 @@ import (
 	"log"
 	"time"
 
-	tm "github.com/trafficmorph/tm-go"
+	tm "github.com/trafficmorph-gif/tm-go"
 )
 
 // Example_listProfiles renders on pkg.go.dev as the SDK's

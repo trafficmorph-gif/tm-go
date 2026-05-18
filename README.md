@@ -5,7 +5,7 @@ from the same versioned OpenAPI snapshot as the [`tm` CLI](../cli/)
 so the two stay in lockstep.
 
 ```
-go get github.com/trafficmorph/tm-go@v0.1.0
+go get github.com/trafficmorph-gif/tm-go@v0.1.0
 ```
 
 ## Quickstart
@@ -18,7 +18,7 @@ import (
     "log"
     "time"
 
-    tm "github.com/trafficmorph/tm-go"
+    tm "github.com/trafficmorph-gif/tm-go"
 )
 
 func main() {
@@ -72,8 +72,8 @@ authenticated user full access regardless of stored plan tier.
 ## What's in the box
 
 ```
-github.com/trafficmorph/tm-go     ← the public package (Client, New, options)
-github.com/trafficmorph/tm-go/api ← generated typed client + DTOs (re-export via Client.API)
+github.com/trafficmorph-gif/tm-go     ← the public package (Client, New, options)
+github.com/trafficmorph-gif/tm-go/api ← generated typed client + DTOs (re-export via Client.API)
 ```
 
 Most callers only need the top-level package. The generated `api`

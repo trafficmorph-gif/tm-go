@@ -2,7 +2,7 @@
 //
 // Quickstart:
 //
-//	import tm "github.com/trafficmorph/tm-go"
+//	import tm "github.com/trafficmorph-gif/tm-go"
 //
 //	c, err := tm.New("tm_…")  // reads TM_BASE_URL env if no opt given
 //	if err != nil {
@@ -34,7 +34,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/trafficmorph/tm-go/api"
+	"github.com/trafficmorph-gif/tm-go/api"
 )
 
 // SpecVersion records which `/api/v1` snapshot this SDK was

@@ -1,4 +1,4 @@
-module github.com/trafficmorph/tm-go
+module github.com/trafficmorph-gif/tm-go
 
 go 1.25.1
 
