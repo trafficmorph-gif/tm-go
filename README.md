@@ -123,9 +123,3 @@ Server-side `/api/v1` changes always preserve backwards
 compatibility within the v1 line — a `v0.3.0` SDK works against
 the same server as a `v0.1.0` SDK, as long as both target
 `/api/v1`.
-
-## See also
-
-- [pkg.go.dev/github.com/trafficmorph-gif/tm-go](https://pkg.go.dev/github.com/trafficmorph-gif/tm-go) — generated API reference, exported types, examples
-- Server-side OpenAPI docs at `/swagger-ui` on any TrafficMorph
-  deployment (or `/v3/api-docs/v1` for the raw JSON spec)
