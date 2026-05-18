@@ -1,12 +1,14 @@
 # tm-go — TrafficMorph Go SDK
 
 Typed Go client for the TrafficMorph `/api/v1` surface. Generated
-from the same versioned OpenAPI snapshot as the [`tm` CLI](../cli/)
-so the two stay in lockstep.
+from the project's OpenAPI snapshot, so request and response
+shapes are statically typed at compile time.
 
 ```
 go get github.com/trafficmorph-gif/tm-go@v0.1.0
 ```
+
+API reference docs live on [pkg.go.dev](https://pkg.go.dev/github.com/trafficmorph-gif/tm-go).
 
 ## Quickstart
 
@@ -16,14 +18,15 @@ package main
 import (
     "context"
     "log"
+    "os"
     "time"
 
     tm "github.com/trafficmorph-gif/tm-go"
 )
 
 func main() {
-    c, err := tm.New("tm_…",
-        tm.WithBaseURL("https://app.trafficmorph.example.com"),
+    c, err := tm.New(os.Getenv("TM_API_KEY"),
+        tm.WithBaseURL(os.Getenv("TM_BASE_URL")), // e.g. http://localhost:8080 or your TrafficMorph host
         tm.WithTimeout(15*time.Second))
     if err != nil {
         log.Fatal(err)
@@ -42,17 +45,18 @@ func main() {
 
 ## Authentication
 
-The SDK injects an `X-Api-Key: tm_…` header on every request. The
+The SDK sends every request with `X-Api-Key: tm_…`. The
 alternative `Authorization: Bearer tm_…` form documented for the
-public API works too — both schemes map to the same backing
-filter on the server side — but the SDK uses `X-Api-Key` because
-it disambiguates from JWT / OAuth in access logs.
+public API works too — both map to the same backing filter on
+the server side — but the SDK uses `X-Api-Key` because it
+disambiguates from JWT / OAuth in server access logs.
 
 Provision the key from the in-app **Settings → API keys** page.
 
 On the cloud build, API access is a TEAM+ feature. Self-hosted
 installs (`app.deployment-mode=SELF_HOSTED`) give every
-authenticated user full access regardless of stored plan tier.
+authenticated user full API access regardless of stored plan
+tier.
 
 ## Configuration
 
@@ -64,7 +68,7 @@ authenticated user full access regardless of stored plan tier.
 
 | Option | Env var | Default | Notes |
 |---|---|---|---|
-| `WithBaseURL` | `TM_BASE_URL` | `https://app.trafficmorph.example.com` | Override per environment. Either spelling (with or without trailing slash) works — the SDK normalizes to a trailing-slash form so path-prefixed deployments behind reverse proxies (`https://host/proxy-prefix`) keep their prefix during URL resolution. |
+| `WithBaseURL` | `TM_BASE_URL` | none — must be set explicitly | Point at your TrafficMorph install (`http://localhost:8080` for local dev, or your hosted URL). Either spelling (with or without trailing slash) works — the SDK normalizes to a trailing-slash form so path-prefixed deployments behind reverse proxies (`https://host/proxy-prefix`) keep their prefix during URL resolution. |
 | `WithTimeout` | — | `30s` | Per-call timeout. The SDK does NOT auto-apply this; callers wrap their context with `context.WithTimeout(ctx, c.Timeout())`. |
 | `WithHTTPClient` | — | `&http.Client{}` | Inject a custom transport for proxies, mTLS, telemetry. |
 | `WithUserAgent` | — | `tm-go-sdk/v1` | Override to tag app traffic in server logs (e.g. `my-app/1.2.3 (tm-go-sdk/v1)`). |
@@ -72,8 +76,8 @@ authenticated user full access regardless of stored plan tier.
 ## What's in the box
 
 ```
-github.com/trafficmorph-gif/tm-go     ← the public package (Client, New, options)
-github.com/trafficmorph-gif/tm-go/api ← generated typed client + DTOs (re-export via Client.API)
+github.com/trafficmorph-gif/tm-go     ← public package (Client, New, options)
+github.com/trafficmorph-gif/tm-go/api ← generated typed client + DTOs (reachable via Client.API)
 ```
 
 Most callers only need the top-level package. The generated `api`
@@ -88,8 +92,9 @@ Endpoint coverage matches the server's `/api/v1` surface 1:1:
 | Profiles | `ListProfiles`, `CreateProfile`, `GetProfile`, `UpdateProfile`, `DeleteProfile` |
 | Runs | `Start`, `Stop`, `Pause`, `Resume` |
 | History | `ListHistory`, `GetHistoryItem` |
-| Domains | `List` (domains), `Add`, `VerifyDns`, `VerifyHttp`, `Remove` |
+| Domains | `ListDomains`, `Add`, `VerifyDns`, `VerifyHttp`, `Remove` |
 | Captures | `Analyse`, `ImportCapture` |
+| Variables sets | `ListVariablesSets`, `Create`, `Get`, `Rename`, `ChangeMode`, `Delete` |
 
 Each endpoint exposes both a raw `*http.Response` form and a typed
 `*WithResponse` form. Prefer the latter for status-code + body
@@ -110,32 +115,17 @@ case 400:
 
 | | Symbol | Meaning |
 |---|---|---|
-| SDK release | `vMAJOR.MINOR.PATCH` git tag | Bumped per SDK cut; tracked in `go.mod` consumers via `go get` |
-| Spec snapshot | `tm.SpecVersion` constant (currently `"v1"`) | Tracks which `/api/v1` revision the SDK was generated against. Bump alongside `make -C cli regen-spec` |
+| SDK release | `vMAJOR.MINOR.PATCH` git tag | Bumped per SDK cut; pin via `go get github.com/trafficmorph-gif/tm-go@vX.Y.Z` |
+| Spec snapshot | `tm.SpecVersion` constant (currently `"v1"`) | Tracks which `/api/v1` revision the SDK was generated against |
 
 A given SDK release is built against exactly one OpenAPI snapshot.
 Server-side `/api/v1` changes always preserve backwards
-compatibility within the v1 line — a v0.3.0 SDK works against the
-same server as a v0.1.0 SDK, as long as both target `/api/v1`.
-
-## Regenerating after a server-side API change
-
-```
-make -C cli regen-spec      # writes ../cli/openapi/v1.json (and .yaml)
-make -C sdk-go regen-client # regenerates this module's api/client.gen.go
-make -C sdk-go test         # smoke-check the new client
-```
-
-Then commit both the snapshot and the regenerated `api/client.gen.go`
-in the same PR — the SDK is built against the committed snapshot,
-not against a server response at build time.
+compatibility within the v1 line — a `v0.3.0` SDK works against
+the same server as a `v0.1.0` SDK, as long as both target
+`/api/v1`.
 
 ## See also
 
-- [`tm` CLI](../cli/) — single-binary wrapper that also imports
-  this SDK's generated types. Designed for CI gating: `tm runs
-  start <id> --wait --fail-on-verdict FAIL`.
-- [OpenAPI spec](../cli/openapi/v1.json) — the canonical
-  `/api/v1` snapshot both the CLI and SDK build from.
-- Server-side docs at `/swagger-ui` on any TrafficMorph
-  deployment.
+- [pkg.go.dev/github.com/trafficmorph-gif/tm-go](https://pkg.go.dev/github.com/trafficmorph-gif/tm-go) — generated API reference, exported types, examples
+- Server-side OpenAPI docs at `/swagger-ui` on any TrafficMorph
+  deployment (or `/v3/api-docs/v1` for the raw JSON spec)
