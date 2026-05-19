@@ -32,6 +32,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/trafficmorph-gif/tm-go/api"
@@ -102,10 +103,10 @@ type Option func(*Client) error
 // silently broke path-prefixed deployments.
 func WithBaseURL(url string) Option {
 	return func(c *Client) error {
-		if url == "" {
-			return errors.New("WithBaseURL: url must not be empty")
+		if err := validateBaseURL(url); err != nil {
+			return fmt.Errorf("WithBaseURL: %w", err)
 		}
-		c.baseURL = ensureTrailingSlash(url)
+		c.baseURL = normalizeBaseURL(url)
 		return nil
 	}
 }
@@ -165,22 +166,66 @@ func WithUserAgent(ua string) Option {
 		if ua == "" {
 			return errors.New("WithUserAgent: ua must not be empty")
 		}
+		if err := validateHeaderValue(ua); err != nil {
+			return fmt.Errorf("WithUserAgent: %w", err)
+		}
 		c.userAgent = ua
 		return nil
 	}
 }
 
+// validateHeaderValue rejects strings that would cause
+// http.Request to fail at execution time with "invalid header
+// field value". The Go stdlib's net/http transport runs the same
+// check (in net/textproto.validHeaderFieldByte) when the header
+// is actually set on a request — but that's deep inside the
+// transport, far from where the user supplied the bad value.
+// Catching it at SDK-construction time gives an error message
+// the caller can act on.
+//
+// The rejected set is the minimal one required: CR, LF, and NUL.
+// CR/LF would enable header-injection attacks (an attacker
+// supplying a key with embedded \r\n could splice in arbitrary
+// extra headers); NUL would just confuse the transport. Tabs and
+// other printable controls are technically valid per RFC 7230
+// and are intentionally allowed through.
+func validateHeaderValue(v string) error {
+	if i := strings.IndexAny(v, "\r\n\x00"); i >= 0 {
+		var what string
+		switch v[i] {
+		case '\r':
+			what = "carriage return"
+		case '\n':
+			what = "newline"
+		case '\x00':
+			what = "NUL byte"
+		}
+		return fmt.Errorf("value contains a %s at position %d; HTTP header values cannot contain CR, LF, or NUL", what, i)
+	}
+	return nil
+}
+
 // New builds a Client. The apiKey must be the full `tm_…` value
 // provisioned from the in-app Settings page; passing the empty
 // string is rejected because it's almost certainly a forgotten
-// env-var.
+// env-var. The apiKey is rejected if it contains CR, LF, or NUL
+// — those would corrupt the HTTP header at request time.
 //
-// Returns an error if any option fails validation or the
-// generated client can't be constructed against the resolved base
-// URL. Construction never makes a network call.
+// A base URL is REQUIRED. Supply one via WithBaseURL or by
+// setting $TM_BASE_URL before calling New. There is no built-in
+// default — historical placeholder defaults were removed because
+// they pointed at a reserved example.com host that doesn't
+// resolve, producing the "default that doesn't work" anti-pattern.
+//
+// Returns an error if any option fails validation, the resolved
+// base URL is empty / malformed, or the generated client can't
+// be constructed. Construction never makes a network call.
 func New(apiKey string, opts ...Option) (*Client, error) {
 	if apiKey == "" {
 		return nil, errors.New("apiKey must not be empty — provision one from the in-app Settings page")
+	}
+	if err := validateHeaderValue(apiKey); err != nil {
+		return nil, fmt.Errorf("apiKey: %w", err)
 	}
 	c := &Client{
 		apiKey:    apiKey,
@@ -193,6 +238,19 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 		if err := opt(c); err != nil {
 			return nil, err
 		}
+	}
+	// After options have run, the base URL must be set — either
+	// from WithBaseURL or from $TM_BASE_URL. Empty here means
+	// neither was supplied; fail with a message that names both
+	// recovery paths so the caller knows what to do.
+	if c.baseURL == "" {
+		return nil, fmt.Errorf("base URL is required: pass tm.WithBaseURL(\"...\") or set $%s before calling tm.New", EnvBaseURL)
+	}
+	// If $TM_BASE_URL was set but malformed, resolveDefaultBaseURL
+	// trusted it (and ran ensureTrailingSlash). Validate now so a
+	// bad env-var value fails just as loudly as WithBaseURL would.
+	if err := validateBaseURL(c.baseURL); err != nil {
+		return nil, fmt.Errorf("$%s: %w", EnvBaseURL, err)
 	}
 
 	// Inject auth header on every outbound request via the

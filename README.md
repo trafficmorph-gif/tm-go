@@ -68,7 +68,7 @@ tier.
 
 | Option | Env var | Default | Notes |
 |---|---|---|---|
-| `WithBaseURL` | `TM_BASE_URL` | none — must be set explicitly | Point at your TrafficMorph install (`http://localhost:8080` for local dev, or your hosted URL). Either spelling (with or without trailing slash) works — the SDK normalizes to a trailing-slash form so path-prefixed deployments behind reverse proxies (`https://host/proxy-prefix`) keep their prefix during URL resolution. |
+| `WithBaseURL` | `TM_BASE_URL` | none — must be set explicitly | Point at your TrafficMorph install (`http://localhost:8080` for local dev, or your hosted URL). Calling `tm.New()` without either `WithBaseURL(...)` or `$TM_BASE_URL` is a constructor error. Either spelling (with or without trailing slash) works — the SDK normalizes to a trailing-slash form so path-prefixed deployments behind reverse proxies (`https://host/proxy-prefix`) keep their prefix during URL resolution. Malformed values (missing scheme, wrong scheme, no host) are rejected at construction time rather than failing late at request time. |
 | `WithTimeout` | — | `30s` | Per-call timeout. The SDK does NOT auto-apply this; callers wrap their context with `context.WithTimeout(ctx, c.Timeout())`. |
 | `WithHTTPClient` | — | `&http.Client{}` | Inject a custom transport for proxies, mTLS, telemetry. |
 | `WithUserAgent` | — | `tm-go-sdk/v1` | Override to tag app traffic in server logs (e.g. `my-app/1.2.3 (tm-go-sdk/v1)`). |

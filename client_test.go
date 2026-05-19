@@ -159,7 +159,7 @@ func TestOptions_ValidationErrors(t *testing.T) {
 		opt  Option
 		want string
 	}{
-		{"empty base URL", WithBaseURL(""), "url must not be empty"},
+		{"empty base URL", WithBaseURL(""), "base URL must not be empty"},
 		{"nil http client", WithHTTPClient(nil), "httpClient must not be nil"},
 		{"zero timeout", WithTimeout(0), "duration must be positive"},
 		{"negative timeout", WithTimeout(-1 * time.Second), "duration must be positive"},
@@ -273,5 +273,151 @@ func TestNew_WithHTTPClient(t *testing.T) {
 	_, _ = c.API.ListProfilesWithResponse(context.Background())
 	if !rt.called {
 		t.Error("custom http.Client.Transport should have been called")
+	}
+}
+
+// TestWithBaseURL_RejectsMalformedURLs locks in fail-fast for the
+// caller-side mistakes that used to fail late at request time with
+// `unsupported protocol scheme "localhost"` or similar opaque
+// errors from net/http. Catching at constructor time names exactly
+// what's wrong with the input.
+func TestWithBaseURL_RejectsMalformedURLs(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string // substring the error must contain
+	}{
+		{"missing scheme", "localhost:8080", "scheme"},
+		{"wrong scheme", "ftp://example.com", "http or https"},
+		{"no host", "https://", "host"},
+		{"whitespace only", "   ", "must not be empty"},
+		{"empty", "", "must not be empty"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := New("tm_test", WithBaseURL(c.in))
+			if err == nil {
+				t.Fatalf("expected error for %q", c.in)
+			}
+			if !strings.Contains(err.Error(), c.want) {
+				t.Errorf("error %q should mention %q", err.Error(), c.want)
+			}
+		})
+	}
+}
+
+// TestWithBaseURL_AcceptsWhitespacePadding — surrounding whitespace
+// is almost always a copy-paste artifact (env var with trailing
+// newline, etc.). The SDK trims it during normalization rather than
+// rejecting outright.
+func TestWithBaseURL_AcceptsWhitespacePadding(t *testing.T) {
+	c, err := New("tm_test", WithBaseURL("  https://example.com  "))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c.BaseURL() != "https://example.com/" {
+		t.Errorf("BaseURL should be trimmed + slash-normalized; got %q", c.BaseURL())
+	}
+}
+
+// TestNew_RejectsInvalidHeaderChars guards against header injection
+// at the apiKey boundary. Without validation, a caller passing a
+// key containing `\r\nX-Injected: yes` would have it silently fail
+// inside net/http with "invalid header field value" — far from
+// the New() callsite. Reject at construction time with a message
+// that names the bad byte.
+func TestNew_RejectsInvalidHeaderChars(t *testing.T) {
+	cases := []struct {
+		name string
+		key  string
+		want string
+	}{
+		{"carriage return", "tm_x\rmore", "carriage return"},
+		{"newline", "tm_x\nInjected: yes", "newline"},
+		{"NUL byte", "tm_x\x00", "NUL byte"},
+		{"CRLF injection attempt", "tm_x\r\nX-Injected: yes", "carriage return"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := New(c.key, WithBaseURL("https://example.com"))
+			if err == nil {
+				t.Fatalf("expected error for key %q", c.key)
+			}
+			if !strings.Contains(err.Error(), c.want) {
+				t.Errorf("error %q should mention %q", err.Error(), c.want)
+			}
+			if !strings.Contains(err.Error(), "apiKey") {
+				t.Errorf("error %q should mention apiKey", err.Error())
+			}
+		})
+	}
+}
+
+// TestWithUserAgent_RejectsInvalidHeaderChars — same fail-fast
+// contract as for apiKey, but for the User-Agent header. CR/LF
+// here would similarly fail late inside net/http transport.
+func TestWithUserAgent_RejectsInvalidHeaderChars(t *testing.T) {
+	cases := []struct {
+		name string
+		ua   string
+		want string
+	}{
+		{"carriage return", "my-app\rfoo", "carriage return"},
+		{"newline", "my-app\nfoo", "newline"},
+		{"NUL byte", "my-app\x00", "NUL byte"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := New("tm_test",
+				WithBaseURL("https://example.com"),
+				WithUserAgent(c.ua))
+			if err == nil {
+				t.Fatalf("expected error for UA %q", c.ua)
+			}
+			if !strings.Contains(err.Error(), c.want) {
+				t.Errorf("error %q should mention %q", err.Error(), c.want)
+			}
+			if !strings.Contains(err.Error(), "WithUserAgent") {
+				t.Errorf("error %q should mention WithUserAgent", err.Error())
+			}
+		})
+	}
+}
+
+// TestNew_RequiresBaseURL — the SDK no longer ships a built-in
+// default base URL (the previous placeholder was in the reserved
+// example.com TLD and didn't resolve). With no WithBaseURL option
+// AND no $TM_BASE_URL env var, New() must error at construction
+// time naming both recovery paths.
+func TestNew_RequiresBaseURL(t *testing.T) {
+	t.Setenv(EnvBaseURL, "") // ensure env unset
+	_, err := New("tm_test")
+	if err == nil {
+		t.Fatal("expected error when no base URL configured")
+	}
+	if !strings.Contains(err.Error(), "WithBaseURL") {
+		t.Errorf("error should mention WithBaseURL option; got: %v", err)
+	}
+	if !strings.Contains(err.Error(), EnvBaseURL) {
+		t.Errorf("error should mention %s env var; got: %v", EnvBaseURL, err)
+	}
+}
+
+// TestNew_RejectsMalformedTMBaseURLEnv — a bad env-var value
+// shouldn't fail late at request time the same way a bad
+// WithBaseURL argument used to. Validate env input at constructor
+// time with a message that names the env var so the caller knows
+// where to look.
+func TestNew_RejectsMalformedTMBaseURLEnv(t *testing.T) {
+	t.Setenv(EnvBaseURL, "localhost:8080") // missing scheme
+	_, err := New("tm_test")
+	if err == nil {
+		t.Fatal("expected error for malformed TM_BASE_URL env")
+	}
+	if !strings.Contains(err.Error(), EnvBaseURL) {
+		t.Errorf("error should mention %s env var; got: %v", EnvBaseURL, err)
+	}
+	if !strings.Contains(err.Error(), "scheme") {
+		t.Errorf("error should mention scheme; got: %v", err)
 	}
 }
