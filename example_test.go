@@ -41,11 +41,17 @@ func Example_listProfiles() {
 // the CLI; library users typically write their own gate logic on
 // top of the typed endpoints.
 func Example_startRunAndWait() {
-	// Always check the constructor error. A malformed $TM_BASE_URL
-	// or any failing Option returns (nil, err) — c.API on a nil
-	// client would panic. Copy-paste-friendly examples must model
-	// this correctly even though it adds one line.
-	c, err := tm.New("tm_replace_me")
+	// Always check the constructor error. A missing/malformed base
+	// URL, a key containing control bytes, or any failing Option
+	// returns (nil, err) — c.API on a nil client would panic.
+	// Copy-paste-friendly examples must model this correctly even
+	// though it adds one line.
+	//
+	// The base URL is REQUIRED: pass tm.WithBaseURL("...") as
+	// shown here, or export $TM_BASE_URL before calling tm.New
+	// (the SDK reads the env var when the option isn't passed).
+	c, err := tm.New("tm_replace_me",
+		tm.WithBaseURL("https://app.trafficmorph.example.com"))
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -32,7 +32,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/trafficmorph-gif/tm-go/api"
@@ -83,10 +82,17 @@ type Client struct {
 // Idiomatic Go functional-options pattern (kubectl, cobra, etc.).
 type Option func(*Client) error
 
-// WithBaseURL overrides the API base URL. Default is taken from
-// $TM_BASE_URL or, if unset, the public hosted instance. Set this
-// for self-hosted deployments or for pointing at a staging
-// environment.
+// WithBaseURL sets the API base URL. There is NO built-in default
+// — calling New without this option falls back to $TM_BASE_URL,
+// and if that env var is also unset, New returns a constructor
+// error. Set this option (or the env var) to point at your
+// TrafficMorph install: `http://localhost:8080` for local dev,
+// `https://app.example.com` for a hosted deployment, etc.
+//
+// Malformed values (missing scheme, wrong scheme, no host) are
+// rejected at construction time rather than failing late on the
+// first API call with an opaque `unsupported protocol scheme`
+// from net/http.
 //
 // Path-prefixed deployments work transparently. The generated
 // client resolves endpoint paths via relative-URL parsing
@@ -177,32 +183,58 @@ func WithUserAgent(ua string) Option {
 // validateHeaderValue rejects strings that would cause
 // http.Request to fail at execution time with "invalid header
 // field value". The Go stdlib's net/http transport runs the same
-// check (in net/textproto.validHeaderFieldByte) when the header
-// is actually set on a request — but that's deep inside the
-// transport, far from where the user supplied the bad value.
-// Catching it at SDK-construction time gives an error message
-// the caller can act on.
+// check (via golang.org/x/net/http/httpguts.ValidHeaderFieldValue)
+// when the header is actually set on a request — but that's deep
+// inside the transport, far from where the user supplied the bad
+// value. Catching it at SDK-construction time gives an error
+// message the caller can act on.
 //
-// The rejected set is the minimal one required: CR, LF, and NUL.
-// CR/LF would enable header-injection attacks (an attacker
-// supplying a key with embedded \r\n could splice in arbitrary
-// extra headers); NUL would just confuse the transport. Tabs and
-// other printable controls are technically valid per RFC 7230
-// and are intentionally allowed through.
+// Per RFC 7230 §3.2.6, a header field-value is built from VCHAR
+// (0x21-0x7E), SP (0x20), HTAB (0x09), and obs-text (0x80-0xFF).
+// We reject anything outside that set: ASCII controls 0x00-0x1F
+// other than HTAB, and DEL (0x7F). Mirroring the stdlib's rule
+// exactly matters because a stricter check here than the
+// transport's would let some bytes through that fail later
+// anyway (the failure this validator exists to prevent).
+//
+// CR and LF in particular are called out by name in the error
+// message because they enable header-injection attacks — an
+// attacker supplying a key with embedded \r\n could splice in
+// arbitrary extra headers — so the message wants to flag that
+// case loudly even though the underlying rule is the broader
+// "no controls".
 func validateHeaderValue(v string) error {
-	if i := strings.IndexAny(v, "\r\n\x00"); i >= 0 {
-		var what string
-		switch v[i] {
-		case '\r':
-			what = "carriage return"
-		case '\n':
-			what = "newline"
-		case '\x00':
-			what = "NUL byte"
+	for i := 0; i < len(v); i++ {
+		b := v[i]
+		// Allowed: HTAB, SP through ~ (VCHAR + space), and the
+		// obs-text range 0x80-0xFF.
+		if b == '\t' || (b >= 0x20 && b != 0x7f) {
+			continue
 		}
-		return fmt.Errorf("value contains a %s at position %d; HTTP header values cannot contain CR, LF, or NUL", what, i)
+		return fmt.Errorf("value contains %s at position %d; HTTP header values cannot contain ASCII control bytes (per RFC 7230, only HTAB, SP, VCHAR, and obs-text are allowed)", describeControlByte(b), i)
 	}
 	return nil
+}
+
+// describeControlByte names a rejected byte for inclusion in the
+// validation error. The named cases (CR/LF/NUL/DEL) cover the
+// values a caller is most likely to have stumbled into — a stray
+// newline from a copy-paste, a NUL from a C-string boundary, a
+// DEL from a corrupt env var. Anything else falls through to the
+// hex form so the caller can grep the input for it.
+func describeControlByte(b byte) string {
+	switch b {
+	case '\r':
+		return "a carriage return (CR, 0x0D)"
+	case '\n':
+		return "a newline (LF, 0x0A)"
+	case '\x00':
+		return "a NUL byte (0x00)"
+	case 0x7f:
+		return "a DEL byte (0x7F)"
+	default:
+		return fmt.Sprintf("a control byte (0x%02X)", b)
+	}
 }
 
 // New builds a Client. The apiKey must be the full `tm_…` value

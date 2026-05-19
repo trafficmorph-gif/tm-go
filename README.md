@@ -5,7 +5,7 @@ from the project's OpenAPI snapshot, so request and response
 shapes are statically typed at compile time.
 
 ```
-go get github.com/trafficmorph-gif/tm-go@v0.1.0
+go get github.com/trafficmorph-gif/tm-go@v0.1.2
 ```
 
 API reference docs live on [pkg.go.dev](https://pkg.go.dev/github.com/trafficmorph-gif/tm-go).

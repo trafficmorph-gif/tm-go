@@ -336,6 +336,13 @@ func TestNew_RejectsInvalidHeaderChars(t *testing.T) {
 		{"newline", "tm_x\nInjected: yes", "newline"},
 		{"NUL byte", "tm_x\x00", "NUL byte"},
 		{"CRLF injection attempt", "tm_x\r\nX-Injected: yes", "carriage return"},
+		// Below: the broader "any ASCII control" rejection. net/http
+		// fails request execution on these too; without SDK-side
+		// validation they'd slip past New() and explode on the first
+		// API call with `invalid header field value`.
+		{"SOH (0x01)", "tm_x\x01", "0x01"},
+		{"ESC (0x1B)", "tm_x\x1bmore", "0x1B"},
+		{"DEL (0x7F)", "tm_x\x7f", "DEL"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
