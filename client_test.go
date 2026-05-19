@@ -292,6 +292,15 @@ func TestWithBaseURL_RejectsMalformedURLs(t *testing.T) {
 		{"no host", "https://", "host"},
 		{"whitespace only", "   ", "must not be empty"},
 		{"empty", "", "must not be empty"},
+		// Query strings and fragments would silently mangle routing
+		// if accepted: the legacy string-based trailing-slash append
+		// produced "/?q=1/" — slash on the query, not the path —
+		// and the generated client's relative-URL resolution then
+		// dropped path segments unpredictably. Reject at validate.
+		{"query string", "https://example.com/?x=1", "query"},
+		{"query on prefix", "https://example.com/team/app?x=1", "query"},
+		{"fragment", "https://example.com/#frag", "fragment"},
+		{"query and fragment", "https://example.com/?x=1#frag", "query"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -317,6 +326,50 @@ func TestWithBaseURL_AcceptsWhitespacePadding(t *testing.T) {
 	}
 	if c.BaseURL() != "https://example.com/" {
 		t.Errorf("BaseURL should be trimmed + slash-normalized; got %q", c.BaseURL())
+	}
+}
+
+// TestNormalizeBaseURL_StructuralSlashPlacement — defense-in-depth
+// regression guard for the trailing-slash placement. validateBaseURL
+// rejects query/fragment inputs upstream, but normalize is also
+// structural so a future code path that bypasses validation still
+// produces a well-formed URL. The legacy string-based normalize
+// would append "/" to the WHOLE string, landing on the query
+// component for inputs like "https://x/?q=1" — producing the
+// invalid "https://x/?q=1/" and silently breaking routing.
+//
+// We test the helper directly rather than through New() because
+// validate refuses query/fragment inputs before they reach
+// normalize. This locks in the helper's structural correctness
+// independent of that gate.
+func TestNormalizeBaseURL_StructuralSlashPlacement(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		// Baseline: input with no path; slash lands on root.
+		{"https://example.com", "https://example.com/"},
+		// Path prefix without trailing slash; slash appends.
+		{"https://example.com/team/app", "https://example.com/team/app/"},
+		// Already-trailing-slash; no change.
+		{"https://example.com/team/app/", "https://example.com/team/app/"},
+		// With port; slash on path.
+		{"http://localhost:8080", "http://localhost:8080/"},
+		// Query string — would be rejected by validateBaseURL in
+		// practice, but normalize is the defense-in-depth layer.
+		// The slash must land on u.Path (before the `?`), not on
+		// the query string.
+		{"https://example.com/team/app?x=1", "https://example.com/team/app/?x=1"},
+		// Fragment — same rule: slash on path, not on fragment.
+		{"https://example.com/team/app#section", "https://example.com/team/app/#section"},
+	}
+	for _, c := range cases {
+		t.Run(c.in, func(t *testing.T) {
+			got := normalizeBaseURL(c.in)
+			if got != c.want {
+				t.Errorf("normalizeBaseURL(%q) = %q; want %q", c.in, got, c.want)
+			}
+		})
 	}
 }
 

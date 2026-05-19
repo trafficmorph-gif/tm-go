@@ -240,8 +240,13 @@ func describeControlByte(b byte) string {
 // New builds a Client. The apiKey must be the full `tm_…` value
 // provisioned from the in-app Settings page; passing the empty
 // string is rejected because it's almost certainly a forgotten
-// env-var. The apiKey is rejected if it contains CR, LF, or NUL
-// — those would corrupt the HTTP header at request time.
+// env-var. The apiKey is also rejected if it contains any byte
+// that net/http would refuse to send as a header value — ASCII
+// controls 0x00-0x1F (except HTAB) and DEL (0x7F) — so a key
+// pasted with a trailing newline or copied through a tool that
+// inserted a stray control byte fails at construction time
+// rather than mid-request with an opaque transport error. See
+// validateHeaderValue for the full rule.
 //
 // A base URL is REQUIRED. Supply one via WithBaseURL or by
 // setting $TM_BASE_URL before calling New. There is no built-in

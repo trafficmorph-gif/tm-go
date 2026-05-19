@@ -35,15 +35,25 @@ func resolveDefaultBaseURL() string {
 }
 
 // validateBaseURL returns nil if raw parses as an absolute
-// http/https URL with a non-empty host, or a typed error
-// otherwise. Catches the common malformed-input cases that would
-// otherwise fail late on the first API call:
+// http/https URL with a non-empty host AND no query string or
+// fragment, or a typed error otherwise. Catches the common
+// malformed-input cases that would otherwise fail late on the
+// first API call (or worse — silently misroute):
 //
 //   * `""` or whitespace-only        → "must not be empty"
 //   * `"localhost:8080"` (no scheme) → "must include http:// or https:// scheme"
 //   * `"ftp://x"` (wrong scheme)     → "scheme must be http or https, got "ftp""
 //   * `"https://"` (no host)         → "must include a host"
 //   * `"://garbage"` (unparseable)   → wraps url.Parse error
+//   * `"https://x/?q=1"`             → "must not contain a query string"
+//   * `"https://x/#frag"`            → "must not contain a fragment"
+//
+// Query strings and fragments are rejected because they corrupt
+// the trailing-slash normalization (a naive append would produce
+// "/?q=1/" — slash appended to the query, not the path) and
+// silently mangle the generated request URLs. Callers who need
+// per-request query params should add them at the endpoint call
+// site, not bake them into the base URL.
 //
 // The string is trimmed before parsing; callers can pass
 // "  https://x  \n" and have it normalize cleanly. Surrounding
@@ -67,25 +77,54 @@ func validateBaseURL(raw string) error {
 	if u.Host == "" {
 		return fmt.Errorf("base URL %q must include a host", raw)
 	}
+	if u.RawQuery != "" {
+		return fmt.Errorf("base URL %q must not contain a query string (have %q); attach per-request params at the endpoint call site instead", raw, u.RawQuery)
+	}
+	if u.Fragment != "" {
+		return fmt.Errorf("base URL %q must not contain a fragment (have %q); fragments are client-side only and have no meaning to the server", raw, u.Fragment)
+	}
 	return nil
 }
 
-// normalizeBaseURL trims surrounding whitespace and ensures a
-// trailing slash. Call AFTER validateBaseURL so this isn't
-// dragged through unparseable input. Extracted so WithBaseURL
-// and resolveDefaultBaseURL can share normalization without
-// duplicating the trim.
+// normalizeBaseURL parses raw and returns it with a trailing
+// slash on u.Path (NOT on the raw string). Call AFTER
+// validateBaseURL so this isn't dragged through unparseable
+// input — but be defensive even so: if the parse fails here
+// somehow, fall back to the string-based append so we don't
+// silently drop data.
+//
+// Why structural: the generated client resolves endpoint paths
+// via `serverURL.Parse("./api/v1/...")`. Relative-URL resolution
+// is path-aware — without a trailing slash on the path, the
+// last segment is treated as a file and gets replaced. A
+// previous string-based implementation appended "/" to the
+// whole URL, which worked for path-only inputs but corrupted
+// any URL with a query or fragment (the slash landed on the
+// wrong component). validateBaseURL now rejects those inputs
+// upstream, but doing the normalization on u.Path makes the
+// function correct even if a future code path bypasses
+// validation.
 func normalizeBaseURL(raw string) string {
-	return ensureTrailingSlash(strings.TrimSpace(raw))
+	raw = strings.TrimSpace(raw)
+	u, err := url.Parse(raw)
+	if err != nil {
+		// Shouldn't happen — validateBaseURL would have caught
+		// it. Defense-in-depth fallback to the historical string
+		// behavior.
+		return ensureTrailingSlash(raw)
+	}
+	if !strings.HasSuffix(u.Path, "/") {
+		u.Path += "/"
+	}
+	return u.String()
 }
 
-// ensureTrailingSlash normalizes a base URL for use with the
-// generated client's relative-URL resolution. See the WithBaseURL
-// godoc for the why: without a trailing slash, path-prefixed
-// deployments lose their prefix during URL.Parse(relative). Both
-// the WithBaseURL option AND the env / default fallback must
-// apply this normalization, otherwise self-hosted callers who set
-// $TM_BASE_URL with no slash would hit the same bug.
+// ensureTrailingSlash is the legacy string-only trailing-slash
+// helper. Used by resolveDefaultBaseURL for the env-var path
+// (where validateBaseURL hasn't run yet — that check happens
+// later in New()) and as the defensive fallback inside
+// normalizeBaseURL. New code should prefer normalizeBaseURL,
+// which is structural and handles query/fragment correctly.
 func ensureTrailingSlash(url string) string {
 	if strings.HasSuffix(url, "/") {
 		return url
