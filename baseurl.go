@@ -91,8 +91,19 @@ func validateBaseURL(raw string) error {
 	if u.Host == "" {
 		return fmt.Errorf("base URL %q must include a host", raw)
 	}
-	if u.RawQuery != "" {
-		return fmt.Errorf("base URL %q must not contain a query string (have %q); attach per-request params at the endpoint call site instead", raw, u.RawQuery)
+	// Reject both `?foo=bar` (RawQuery populated) AND a bare
+	// trailing `?` (RawQuery empty but u.ForceQuery is true, which
+	// makes url.URL.String() emit the `?` anyway). The bare-`?`
+	// case isn't a meaningful query string but still corrupts
+	// trailing-slash expectations: the emitted form ends with `?`,
+	// not `/`, and the generated client's relative-URL resolution
+	// then drops path segments.
+	if u.RawQuery != "" || u.ForceQuery {
+		have := u.RawQuery
+		if have == "" {
+			have = "(empty, but trailing `?` is present)"
+		}
+		return fmt.Errorf("base URL %q must not contain a query string (have %q); attach per-request params at the endpoint call site instead", raw, have)
 	}
 	if u.Fragment != "" {
 		return fmt.Errorf("base URL %q must not contain a fragment (have %q); fragments are client-side only and have no meaning to the server", raw, u.Fragment)
@@ -139,7 +150,24 @@ func normalizeBaseURL(raw string) string {
 		// behavior.
 		return ensureTrailingSlash(raw)
 	}
-	if !strings.HasSuffix(u.Path, "/") {
+
+	// Whether the URL already ends with a trailing slash in its
+	// emitted form is NOT always answered by HasSuffix(u.Path, "/")
+	// — for inputs like `http://x/%2F`, url.Parse stores
+	// `u.Path = "//"` (the `%2F` decodes to `/`) while
+	// `u.RawPath = "/%2F"`. u.String() emits RawPath, so the
+	// emitted form ends with `F`, NOT `/`. Skipping the append
+	// based on the decoded suffix here would silently produce a
+	// no-trailing-slash base URL, reintroducing the
+	// path-prefix-dropped bug. Inspect RawPath when it's set.
+	var hasTrailingSlash bool
+	if u.RawPath != "" {
+		hasTrailingSlash = strings.HasSuffix(u.RawPath, "/")
+	} else {
+		hasTrailingSlash = strings.HasSuffix(u.Path, "/")
+	}
+
+	if !hasTrailingSlash {
 		u.Path += "/"
 		if u.RawPath != "" {
 			// RawPath is set when the input had non-default
