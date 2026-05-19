@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// FuzzBaseURLValidationAndNormalization pins three invariants
+// FuzzBaseURLValidationAndNormalization pins four invariants
 // over the validate/normalize pair against arbitrary inputs:
 //
 //  1. Neither function panics. The URL parser is robust, but a
@@ -14,12 +14,10 @@ import (
 //     guard that catches it before users do.
 //
 //  2. normalizeBaseURL is idempotent on inputs that validate.
-//     A double normalization (e.g. WithBaseURL ran, code reads
-//     c.baseURL and re-normalizes downstream) must produce the
-//     same string. The unified pipeline in New() relies on this
-//     — the option path effectively normalizes twice (once via
-//     WithBaseURL's now-defunct internal pass, kept idempotent
-//     for defense-in-depth, then once at the end of New()).
+//     A general property worth pinning regardless of how the
+//     callers wire things up — and the current pipeline relies
+//     on it implicitly when computing fallback / diagnostic
+//     paths from an already-normalized stored value.
 //
 //  3. validateBaseURL accepts normalizeBaseURL's output. A
 //     caller pattern of "validate raw, store norm(raw), later
@@ -30,6 +28,16 @@ import (
 //     resolution depends on — if it ever stops holding, the
 //     path-prefixed-deployment bug returns and is silently
 //     destructive.
+//
+// Current call shape, for readers wondering when each helper
+// runs: WithBaseURL validates its arg and stores the trimmed-raw
+// value (no normalize). resolveDefaultBaseURL returns the
+// trimmed-raw $TM_BASE_URL (no normalize). New() then runs
+// validate + normalize once at the end on whichever source
+// supplied c.baseURL. So normalize fires exactly once per
+// construction — the idempotence invariant above isn't load-
+// bearing for the current pipeline, but it's a sanity property
+// any URL normalizer should have.
 //
 // We don't fuzz the option/env parity invariant here because
 // asserting it requires mutating $TM_BASE_URL, which is
@@ -69,6 +77,27 @@ func FuzzBaseURLValidationAndNormalization(f *testing.F) {
 		"://garbage",
 		"https://x\x00.example.com",
 		"   \t\n",
+		// Explicit regression seeds for the two bugs the
+		// randomized fuzzer found on its first run. Listing them
+		// here makes the intent visible in code review — without
+		// this, a maintainer would only see them in
+		// testdata/fuzz/.../<hash> files. Both are also kept on
+		// disk in the auto-saved corpus so `go test` replays them
+		// on every push regardless.
+		//
+		//   "http://0/%2F" — `u.Path = "//"` (the encoded slash
+		//   decodes to a literal `/`, doubling the path) while
+		//   `u.RawPath = "/%2F"`. The pre-fix HasSuffix check on
+		//   the DECODED path returned true and skipped appending
+		//   the trailing slash, but the EMITTED form (which uses
+		//   RawPath) ends with `F`, not `/`. Fixed by checking
+		//   RawPath's suffix when RawPath is set.
+		"http://0/%2F",
+		//   "http://0/?" — `u.RawQuery = ""` but `u.ForceQuery =
+		//   true`, so `u.String()` emits the trailing `?`. The
+		//   pre-fix validate only checked `RawQuery != ""` and
+		//   missed it. Fixed by also rejecting ForceQuery.
+		"http://0/?",
 	}
 	for _, s := range seeds {
 		f.Add(s)
