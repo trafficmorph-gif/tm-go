@@ -14,7 +14,7 @@ import (
 // the SDK and the `tm` binary.
 const EnvBaseURL = "TM_BASE_URL"
 
-// resolveDefaultBaseURL returns the base URL from $TM_BASE_URL,
+// resolveDefaultBaseURL returns the trimmed value of $TM_BASE_URL,
 // or an empty string if the env var isn't set. There's no
 // built-in fallback — the SDK requires the caller to supply a
 // base URL either via WithBaseURL or the env var. New() turns
@@ -22,16 +22,30 @@ const EnvBaseURL = "TM_BASE_URL"
 // surfaces at client-construction time, not on the first API
 // call.
 //
+// Trim-only on purpose: validation and normalization happen
+// downstream in New() so env-sourced values go through the SAME
+// pipeline as WithBaseURL inputs. Two reasons:
+//
+//   1. Parity. Without unified normalization, the option and env
+//      paths can produce DIFFERENT BaseURL() strings for the same
+//      logical input — e.g. an input containing `%2F` (encoded
+//      slash) survives string-based normalization but gets
+//      decoded into a literal `/` by structural normalization.
+//      Routing depends on which spelling the caller used, which
+//      is the worst kind of bug to debug.
+//
+//   2. Cleaner diagnostics. Pre-appending `/` here meant validate
+//      saw `https://x?q=1/` for an env value of `https://x?q=1`,
+//      and the resulting error reported a query string of `q=1/`
+//      that the user never typed. Returning raw keeps the error
+//      message faithful to what the user actually set.
+//
 // (An earlier version returned a placeholder hosted URL
 // `https://app.trafficmorph.example.com`, but that domain is in
 // the IANA-reserved example.com TLD and doesn't resolve —
 // "default that doesn't work" is worse than no default.)
 func resolveDefaultBaseURL() string {
-	v := strings.TrimSpace(os.Getenv(EnvBaseURL))
-	if v == "" {
-		return ""
-	}
-	return ensureTrailingSlash(v)
+	return strings.TrimSpace(os.Getenv(EnvBaseURL))
 }
 
 // validateBaseURL returns nil if raw parses as an absolute
@@ -104,6 +118,18 @@ func validateBaseURL(raw string) error {
 // upstream, but doing the normalization on u.Path makes the
 // function correct even if a future code path bypasses
 // validation.
+//
+// RawPath preservation: url.Parse populates u.RawPath only when
+// the input's path encoding differs from the default re-encoding
+// of u.Path — typically when the path contains percent-encoded
+// reserved characters like `%2F` (encoded slash). If we appended
+// only to u.Path, url.URL.String() would re-escape from Path using
+// default rules and turn `%2F` into a literal `/` — silently
+// rewriting routing. Appending the same trailing slash to BOTH
+// keeps RawPath a valid encoding of Path, so String() prefers
+// RawPath and the original encoding survives end-to-end. Without
+// this, WithBaseURL and TM_BASE_URL would produce different
+// BaseURL() strings for the same logical input.
 func normalizeBaseURL(raw string) string {
 	raw = strings.TrimSpace(raw)
 	u, err := url.Parse(raw)
@@ -115,6 +141,13 @@ func normalizeBaseURL(raw string) string {
 	}
 	if !strings.HasSuffix(u.Path, "/") {
 		u.Path += "/"
+		if u.RawPath != "" {
+			// RawPath is set when the input had non-default
+			// encoding (e.g. `%2F`). Tack the slash onto the
+			// encoded form too so url.URL.String() emits the
+			// preserved encoding rather than re-escaping Path.
+			u.RawPath += "/"
+		}
 	}
 	return u.String()
 }

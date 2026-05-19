@@ -362,12 +362,111 @@ func TestNormalizeBaseURL_StructuralSlashPlacement(t *testing.T) {
 		{"https://example.com/team/app?x=1", "https://example.com/team/app/?x=1"},
 		// Fragment — same rule: slash on path, not on fragment.
 		{"https://example.com/team/app#section", "https://example.com/team/app/#section"},
+		// Percent-encoded slash: `%2F` is decoded into Path as `/`
+		// but url.Parse records the original encoding in RawPath.
+		// We append the trailing slash to BOTH so url.URL.String()
+		// uses RawPath and preserves the encoding. Without this
+		// the encoded form would be lost, silently rewriting the
+		// path semantics: `/a%2Fb` (one segment) ≠ `/a/b` (two
+		// segments) per RFC 3986.
+		{"https://example.com/a%2Fb", "https://example.com/a%2Fb/"},
+		// Percent-encoded non-reserved char (`%21` = `!`). Round-
+		// trips through url.URL because `!` is a path-valid char
+		// regardless of encoding; we just confirm we don't break it.
+		{"https://example.com/foo%21bar", "https://example.com/foo%21bar/"},
 	}
 	for _, c := range cases {
 		t.Run(c.in, func(t *testing.T) {
 			got := normalizeBaseURL(c.in)
 			if got != c.want {
 				t.Errorf("normalizeBaseURL(%q) = %q; want %q", c.in, got, c.want)
+			}
+		})
+	}
+}
+
+// TestNew_OptionAndEnv_PathEncodingParity — the option path and
+// env path must produce identical BaseURL() output for the same
+// logical input. An earlier version normalized env values via a
+// string-based ensureTrailingSlash (which preserved any encoding)
+// but normalized option values structurally (which decoded `%2F`
+// into `/`). Two callers with the same intent but different
+// configuration sources ended up routing to different endpoints.
+// This test pins the unified pipeline.
+func TestNew_OptionAndEnv_PathEncodingParity(t *testing.T) {
+	cases := []string{
+		"https://example.com/a%2Fb",
+		"https://example.com/team%2Fnested/app",
+		"https://example.com/path%21bang",
+	}
+	for _, in := range cases {
+		t.Run(in, func(t *testing.T) {
+			// Option path.
+			t.Setenv(EnvBaseURL, "")
+			cOpt, err := New("tm_test", WithBaseURL(in))
+			if err != nil {
+				t.Fatalf("New via WithBaseURL: %v", err)
+			}
+
+			// Env path — clear any WithBaseURL effect by re-constructing.
+			t.Setenv(EnvBaseURL, in)
+			cEnv, err := New("tm_test")
+			if err != nil {
+				t.Fatalf("New via TM_BASE_URL: %v", err)
+			}
+
+			if cOpt.BaseURL() != cEnv.BaseURL() {
+				t.Errorf("parity violated for %q:\n  option = %q\n  env    = %q",
+					in, cOpt.BaseURL(), cEnv.BaseURL())
+			}
+			// Also sanity-check that the encoded slash didn't get
+			// silently decoded into a literal `/`. Path-segment
+			// semantics: `/a%2Fb` is ONE segment, `/a/b` is two.
+			if cOpt.BaseURL() == "https://example.com/a/b/" && in == "https://example.com/a%2Fb" {
+				t.Errorf("%%2F was decoded into literal `/`; encoding not preserved (got %q)",
+					cOpt.BaseURL())
+			}
+		})
+	}
+}
+
+// TestNew_RejectsMalformedTMBaseURLEnv_PreservesInputText — the
+// env-path error message must reference the value the USER set,
+// not a normalized-then-rejected variant. An earlier version
+// pre-appended `/` inside resolveDefaultBaseURL before validation,
+// so a user-set env like `https://x?q=1` was reported as having
+// a query string of `q=1/` — the trailing slash was synthesized
+// by the SDK, not typed by the user, and made the error harder
+// to act on.
+func TestNew_RejectsMalformedTMBaseURLEnv_PreservesInputText(t *testing.T) {
+	cases := []struct {
+		env        string
+		mustNotSay string
+	}{
+		// Validate's error renders the parsed query string. With
+		// the pre-append bug it'd be "x=1/"; we want "x=1".
+		{"https://example.com?x=1", "x=1/"},
+		// Same for fragment: was "frag/" with the bug, want "frag".
+		{"https://example.com#frag", "frag/"},
+		// Wrong scheme: was reported with trailing slash too.
+		{"ftp://example.com", "ftp:///"},
+	}
+	for _, c := range cases {
+		t.Run(c.env, func(t *testing.T) {
+			t.Setenv(EnvBaseURL, c.env)
+			_, err := New("tm_test")
+			if err == nil {
+				t.Fatal("expected validation error")
+			}
+			// The error must mention the env var (so the user
+			// knows where to look) AND must NOT contain the
+			// synthetic trailing-slash variant.
+			if !strings.Contains(err.Error(), EnvBaseURL) {
+				t.Errorf("error %q should mention %s", err.Error(), EnvBaseURL)
+			}
+			if strings.Contains(err.Error(), c.mustNotSay) {
+				t.Errorf("error %q contains synthetic %q (slash-appended before validate?)",
+					err.Error(), c.mustNotSay)
 			}
 		})
 	}

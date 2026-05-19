@@ -32,6 +32,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/trafficmorph-gif/tm-go/api"
@@ -112,7 +113,12 @@ func WithBaseURL(url string) Option {
 		if err := validateBaseURL(url); err != nil {
 			return fmt.Errorf("WithBaseURL: %w", err)
 		}
-		c.baseURL = normalizeBaseURL(url)
+		// Store trimmed-raw, NOT normalized. Normalization runs
+		// once at the end of New() so option and env paths go
+		// through the same pipeline. See resolveDefaultBaseURL's
+		// godoc for why unifying matters (option-vs-env parity
+		// for `%2F` and similar encoded characters).
+		c.baseURL = strings.TrimSpace(url)
 		return nil
 	}
 }
@@ -283,12 +289,19 @@ func New(apiKey string, opts ...Option) (*Client, error) {
 	if c.baseURL == "" {
 		return nil, fmt.Errorf("base URL is required: pass tm.WithBaseURL(\"...\") or set $%s before calling tm.New", EnvBaseURL)
 	}
-	// If $TM_BASE_URL was set but malformed, resolveDefaultBaseURL
-	// trusted it (and ran ensureTrailingSlash). Validate now so a
-	// bad env-var value fails just as loudly as WithBaseURL would.
+	// Validate + normalize whichever source supplied c.baseURL. If
+	// WithBaseURL ran, the value already passed validate inside
+	// the option (with a "WithBaseURL: ..." prefix) — the call
+	// here is idempotent for that path. If the source was env,
+	// this is the FIRST validate, so the "$TM_BASE_URL: ..."
+	// prefix on the error is accurate. Either way, normalize
+	// runs exactly once on the unmangled raw value, so the option
+	// and env paths produce identical BaseURL() output for the
+	// same logical input (including encoded chars like %2F).
 	if err := validateBaseURL(c.baseURL); err != nil {
 		return nil, fmt.Errorf("$%s: %w", EnvBaseURL, err)
 	}
+	c.baseURL = normalizeBaseURL(c.baseURL)
 
 	// Inject auth header on every outbound request via the
 	// generated client's RequestEditor hook. Doing it once at
