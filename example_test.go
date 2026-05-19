@@ -14,10 +14,10 @@ import (
 // client, hit a typed endpoint, decode the typed response.
 func Example_listProfiles() {
 	// Replace the URL with your TrafficMorph install. `http://localhost:8080`
-	// is the default for a local server run via `mvnw spring-boot:run`;
-	// hosted deployments use `https://app.<your-domain>`. Empty / malformed
-	// values are rejected at construction time, so a forgotten env var
-	// won't silently route requests to nowhere.
+	// is typical for local development; hosted deployments use
+	// `https://app.<your-domain>`. Empty / malformed values are rejected at
+	// construction time, so a forgotten env var won't silently route
+	// requests to nowhere.
 	c, err := tm.New("tm_replace_me",
 		tm.WithBaseURL("http://localhost:8080"),
 		tm.WithTimeout(15*time.Second))
@@ -35,9 +35,9 @@ func Example_listProfiles() {
 	if resp.StatusCode() != 200 {
 		log.Fatalf("server returned %s: %s", resp.Status(), resp.Body)
 	}
-	// resp.Body carries the raw bytes; oapi-codegen would expose
-	// resp.JSON200 here if the OpenAPI spec carried a response
-	// schema — see the README for decoding patterns.
+	// resp.Body carries the raw response bytes; decode with
+	// encoding/json and the typed structs from the api sub-package
+	// — see the README's "Decoding responses" section.
 	fmt.Printf("got %d bytes of profile list\n", len(resp.Body))
 }
 

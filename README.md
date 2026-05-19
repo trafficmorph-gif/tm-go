@@ -21,9 +21,8 @@
 [![Go version](https://img.shields.io/github/go-mod/go-version/trafficmorph-gif/tm-go)](go.mod)
 [![License](https://img.shields.io/github/license/trafficmorph-gif/tm-go)](LICENSE)
 
-Typed Go client for the TrafficMorph `/api/v1` surface. Generated
-from the project's OpenAPI snapshot, so request and response
-shapes are statically typed at compile time.
+Typed Go client for the TrafficMorph `/api/v1` API. Request and
+response shapes are statically typed at compile time.
 
 API reference docs live on [pkg.go.dev](https://pkg.go.dev/github.com/trafficmorph-gif/tm-go).
 
@@ -41,7 +40,7 @@ go get github.com/trafficmorph-gif/tm-go@v0.1.7
 
 - **Go 1.25 or newer** — declared minimum in [`go.mod`](go.mod).
 - **A TrafficMorph API key** in the form `tm_…`. Provision one from the in-app **Settings → API keys** page.
-- **A reachable TrafficMorph install.** The examples below assume `http://localhost:8080` (a server running locally via `mvnw spring-boot:run`); swap for your hosted URL otherwise. There is no built-in default — the SDK requires the base URL to be set explicitly.
+- **A reachable TrafficMorph install.** The examples below assume `http://localhost:8080` for local development; swap for your hosted URL otherwise. There is no built-in default — the SDK requires the base URL to be set explicitly.
 
 ## Quickstart
 
@@ -96,7 +95,7 @@ If the program errored before reaching the first line, jump to [Common errors](#
 
 ## Decoding responses
 
-`resp.Body` is the raw HTTP body as `[]byte`. The generated `*WithResponse` types intentionally don't carry typed `JSON200` fields yet (the upstream OpenAPI spec doesn't declare typed response schemas; tracked as a follow-up). Decode with `encoding/json` and the typed structs from the `api` sub-package — replace the `log.Printf("status: …")` line in the Quickstart with:
+`resp.Body` is the raw HTTP response body as `[]byte`. Decode it with `encoding/json` and the typed structs from the `api` sub-package — replace the `log.Printf("status: …")` line in the Quickstart with:
 
 ```go
 switch resp.StatusCode() {
@@ -125,7 +124,7 @@ default:
 
 Add `"encoding/json"`, `"fmt"`, and `"github.com/trafficmorph-gif/tm-go/api"` to the import block.
 
-Pointer fields in the typed structs (`*int64`, `*string`, ...) reflect OpenAPI optional-field semantics — always nil-check before dereferencing.
+Pointer fields in the typed structs (`*int64`, `*string`, ...) are optional — always nil-check before dereferencing.
 
 ## Next steps
 
@@ -194,7 +193,7 @@ All errors below come from `tm.New(...)` — they surface at construction time, 
 
 ### Base URL rules
 
-Option and env values flow through the same validate-and-normalize pipeline, so they produce identical results for the same logical input. The option wins on conflict.
+Option and env values are validated and normalized the same way, so they produce identical results for the same logical input. The option wins on conflict.
 
 **Accepted shapes** — any absolute `http://` or `https://` URL with a non-empty host:
 
@@ -220,18 +219,18 @@ Query strings and fragments are refused because they belong on per-request URLs,
 
 ## Authentication
 
-The SDK sends every request with `X-Api-Key: tm_…`. The alternative `Authorization: Bearer tm_…` form documented for the public API works too — both map to the same backing filter on the server side — but the SDK uses `X-Api-Key` because it disambiguates from JWT / OAuth in server access logs.
+The SDK sends every request with `X-Api-Key: tm_…`. The API also accepts `Authorization: Bearer tm_…`, but the SDK uses `X-Api-Key`.
 
 ## What's in the box
 
 ```
 github.com/trafficmorph-gif/tm-go     ← public package (Client, New, options)
-github.com/trafficmorph-gif/tm-go/api ← generated typed client + request/response structs (reachable via Client.API)
+github.com/trafficmorph-gif/tm-go/api ← typed client + request/response structs (reachable via Client.API)
 ```
 
-Most callers only need the top-level package. The generated `api` sub-package is exposed so callers can reach the typed request/response structs (e.g. `api.TrafficProfileSummaryResponse`) and the typed endpoint methods (e.g. `c.API.ListProfilesWithResponse`).
+Most callers only need the top-level package. The `api` sub-package holds the typed request/response structs (e.g. `api.TrafficProfileSummaryResponse`) and the typed endpoint methods (e.g. `c.API.ListProfilesWithResponse`).
 
-Endpoint coverage matches the server's `/api/v1` surface 1:1:
+Endpoint coverage matches the server's `/api/v1` endpoints 1:1:
 
 | Tag | Methods |
 |---|---|
@@ -248,7 +247,7 @@ Each endpoint exposes both a raw `*http.Response` form and a typed `*WithRespons
 
 | | Symbol | Meaning |
 |---|---|---|
-| SDK release | `vMAJOR.MINOR.PATCH` git tag | Bumped per SDK cut; pin via `go get github.com/trafficmorph-gif/tm-go@vX.Y.Z` |
-| Spec snapshot | `tm.SpecVersion` constant (currently `"v1"`) | Tracks which `/api/v1` revision the SDK was generated against |
+| SDK release | `vMAJOR.MINOR.PATCH` git tag | Pin via `go get github.com/trafficmorph-gif/tm-go@vX.Y.Z` |
+| API version | `tm.SpecVersion` constant (currently `"v1"`) | The `/api/v1` revision this SDK targets |
 
-A given SDK release is built against exactly one OpenAPI snapshot. Server-side `/api/v1` changes always preserve backwards compatibility within the v1 line — a `v0.3.0` SDK works against the same server as a `v0.1.0` SDK, as long as both target `/api/v1`.
+Each SDK release targets one specific server `/api/v1` revision. The server preserves backwards compatibility within `/api/v1`, so SDK and server versions move independently — any tagged SDK release works against any TrafficMorph server still exposing `/api/v1`.

@@ -19,12 +19,10 @@
 //
 // Versioning: this SDK is generated from a versioned OpenAPI
 // snapshot — see the `SpecVersion` constant for which v1 revision
-// the binary was built against. The exported surface is the same
-// shape produced by oapi-codegen 2.7.0; downstream code that
-// imports the typed models (request / response structs) and
-// endpoint methods will continue to compile across SDK minor
-// versions as long as the server's `/api/v1` contract doesn't
-// break.
+// the binary was built against. Downstream code that imports the
+// typed models (request / response structs) and endpoint methods
+// will continue to compile across SDK minor versions as long as
+// the server's `/api/v1` contract doesn't break.
 package tm
 
 import (
