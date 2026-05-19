@@ -17,9 +17,9 @@
 // The client injects the header on every outbound request via a
 // RequestEditor.
 //
-// Versioning: this SDK is generated from a versioned OpenAPI
-// snapshot — see the `SpecVersion` constant for which v1 revision
-// the binary was built against. Downstream code that imports the
+// Versioning: each SDK release targets one specific `/api/v1`
+// revision — see the `SpecVersion` constant for which one this
+// binary was built against. Downstream code that imports the
 // typed models (request / response structs) and endpoint methods
 // will continue to compile across SDK minor versions as long as
 // the server's `/api/v1` contract doesn't break.
