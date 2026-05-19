@@ -1,4 +1,4 @@
-# tm-go — TrafficMorph Go SDK
+# TrafficMorph Go SDK
 
 ```
 ████████╗██████╗  █████╗ ███████╗███████╗██╗ ██████╗
@@ -33,7 +33,7 @@ API reference docs live on [pkg.go.dev](https://pkg.go.dev/github.com/trafficmor
 go get github.com/trafficmorph-gif/tm-go@latest
 
 # Reproducible builds (CI / production) — pin to an exact tag.
-go get github.com/trafficmorph-gif/tm-go@v1.0.0
+go get github.com/trafficmorph-gif/tm-go@v1.0.1
 ```
 
 ## Prerequisites
