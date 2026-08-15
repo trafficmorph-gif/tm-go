@@ -85,7 +85,7 @@ type Option func(*Client) error
 // — calling New without this option falls back to $TM_BASE_URL,
 // and if that env var is also unset, New returns a constructor
 // error. Set this option (or the env var) to point at your
-// TrafficMorph install: `http://localhost:8080` for local dev,
+// TrafficMorph install: `http://localhost:8092` for local dev,
 // `https://app.example.com` for a hosted deployment, etc.
 //
 // Malformed values (missing scheme, wrong scheme, no host) are

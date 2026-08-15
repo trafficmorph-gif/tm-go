@@ -55,7 +55,7 @@ func resolveDefaultBaseURL() string {
 // first API call (or worse — silently misroute):
 //
 //   * `""` or whitespace-only        → "must not be empty"
-//   * `"localhost:8080"` (no scheme) → "must include http:// or https:// scheme"
+//   * `"localhost:8092"` (no scheme) → "must include http:// or https:// scheme"
 //   * `"ftp://x"` (wrong scheme)     → "scheme must be http or https, got "ftp""
 //   * `"https://"` (no host)         → "must include a host"
 //   * `"://garbage"` (unparseable)   → wraps url.Parse error

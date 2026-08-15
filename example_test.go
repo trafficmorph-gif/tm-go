@@ -13,13 +13,13 @@ import (
 // quickstart sample. Covers the most common flow: construct the
 // client, hit a typed endpoint, decode the typed response.
 func Example_listProfiles() {
-	// Replace the URL with your TrafficMorph install. `http://localhost:8080`
+	// Replace the URL with your TrafficMorph install. `http://localhost:8092`
 	// is typical for local development; hosted deployments use
 	// `https://app.<your-domain>`. Empty / malformed values are rejected at
 	// construction time, so a forgotten env var won't silently route
 	// requests to nowhere.
 	c, err := tm.New("tm_replace_me",
-		tm.WithBaseURL("http://localhost:8080"),
+		tm.WithBaseURL("http://localhost:8092"),
 		tm.WithTimeout(15*time.Second))
 	if err != nil {
 		log.Fatal(err)
@@ -55,9 +55,9 @@ func Example_startRunAndWait() {
 	// The base URL is REQUIRED: pass tm.WithBaseURL("...") as
 	// shown here, or export $TM_BASE_URL before calling tm.New
 	// (the SDK reads the env var when the option isn't passed).
-	// Swap localhost:8080 for your TrafficMorph install URL.
+	// Swap localhost:8092 for your TrafficMorph install URL.
 	c, err := tm.New("tm_replace_me",
-		tm.WithBaseURL("http://localhost:8080"))
+		tm.WithBaseURL("http://localhost:8092"))
 	if err != nil {
 		log.Fatal(err)
 	}

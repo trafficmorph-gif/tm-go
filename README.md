@@ -40,7 +40,7 @@ go get github.com/trafficmorph-gif/tm-go@v1.0.2
 
 - **Go 1.25 or newer** — declared minimum in [`go.mod`](go.mod).
 - **A TrafficMorph API key** in the form `tm_…`. Provision one from the in-app **Settings → API keys** page.
-- **A reachable TrafficMorph install.** The examples below assume `http://localhost:8080` for local development; swap for your hosted URL otherwise. There is no built-in default — the SDK requires the base URL to be set explicitly.
+- **A reachable TrafficMorph install.** The examples below assume `http://localhost:8092` for local development; swap for your hosted URL otherwise. There is no built-in default — the SDK requires the base URL to be set explicitly.
 
 ## Quickstart
 
@@ -48,7 +48,7 @@ Export the two required values before running the program, so the snippet works 
 
 ```bash
 export TM_API_KEY="tm_your_key_here"
-export TM_BASE_URL="http://localhost:8080"   # or your hosted TrafficMorph URL
+export TM_BASE_URL="http://localhost:8092"   # or your hosted TrafficMorph URL
 ```
 
 Then:
@@ -87,7 +87,7 @@ func main() {
 ### First successful call checklist
 
 - [ ] `tm_…` API key exported as `TM_API_KEY` (or hard-coded in the call to `tm.New`).
-- [ ] `TM_BASE_URL` points at a reachable TrafficMorph server (`http://localhost:8080` for local dev).
+- [ ] `TM_BASE_URL` points at a reachable TrafficMorph server (`http://localhost:8092` for local dev).
 - [ ] Program prints `status: 200 OK, N bytes` — an empty profile list is `[]`, so N is typically ≥ 2.
 - [ ] `resp.Body` holds the JSON payload. Decode it per [Decoding responses](#decoding-responses) below.
 
@@ -170,7 +170,7 @@ All errors below come from `tm.New(...)` — they surface at construction time, 
 | `apiKey must not be empty` | First arg to `tm.New` is `""` — usually a missing `TM_API_KEY` env var. | Pass the literal key or `export TM_API_KEY=...` before running. |
 | `apiKey: value contains a carriage return …` (or newline, NUL, DEL, other control byte) | API key has stray whitespace / control chars (a common copy-paste artifact). | Only the literal `tm_…` characters belong in the value; strip surrounding whitespace. |
 | `base URL is required: pass tm.WithBaseURL(...) or set $TM_BASE_URL` | No `WithBaseURL` option AND no `$TM_BASE_URL` env var. | Pass `tm.WithBaseURL("http://…")` or export `TM_BASE_URL`. |
-| `WithBaseURL: base URL "…" must include http:// or https:// scheme` | Base URL is missing the protocol (e.g. `localhost:8080`). | Add the scheme: `http://localhost:8080`. |
+| `WithBaseURL: base URL "…" must include http:// or https:// scheme` | Base URL is missing the protocol (e.g. `localhost:8092`). | Add the scheme: `http://localhost:8092`. |
 | `WithBaseURL: base URL "…" has scheme "…"; must be http or https` | Non-`http`/`https` scheme (e.g. `ftp://…`). | Use `http://` or `https://`. |
 | `WithBaseURL: base URL "…" must not contain a query string` | Base URL has `?key=value` appended. | Strip the query — attach per-request params at the endpoint call site instead. |
 | `WithBaseURL: base URL "…" must not contain a fragment` | Base URL has `#foo` appended. | Strip the fragment — fragments are client-side only and meaningless to the server. |
@@ -197,7 +197,7 @@ Option and env values are validated and normalized the same way, so they produce
 
 **Accepted shapes** — any absolute `http://` or `https://` URL with a non-empty host:
 
-- `http://localhost:8080` — typical local dev.
+- `http://localhost:8092` — typical local dev.
 - `https://app.example.com` — hosted deployment.
 - `https://host/proxy-prefix` — reverse-proxy mount; the prefix is preserved during URL resolution.
 - `https://host/a%2Fb` — percent-encoded path segments stay verbatim. Per RFC 3986, `/a%2Fb` (one segment, containing a literal slash) and `/a/b` (two segments) are semantically different paths — the SDK never collapses one into the other.
@@ -209,7 +209,7 @@ The SDK appends a trailing slash if missing, so both spellings (with or without)
 | Bad input | Error fragment |
 |---|---|
 | `""` or whitespace-only | `must not be empty` |
-| `localhost:8080` (no scheme) | `must include … scheme` |
+| `localhost:8092` (no scheme) | `must include … scheme` |
 | `ftp://x` (wrong scheme) | `must be http or https` |
 | `https://` (no host) | `must include a host` |
 | `https://x/?q=1` (query) | `must not contain a query string` |
