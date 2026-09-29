@@ -234,12 +234,14 @@ Endpoint coverage matches the server's `/api/v1` endpoints 1:1:
 
 | Tag | Methods |
 |---|---|
-| Profiles | `ListProfiles`, `CreateProfile`, `GetProfile`, `UpdateProfile`, `DeleteProfile` |
+| Profiles | `ListProfiles`, `CreateProfile`, `GetProfile`, `UpdateProfile`, `DeleteProfile`, `DeleteSchedule`, `ExportProfile`, `ImportProfile` |
+| Account | `GetAccount` |
 | Runs | `Start`, `StartRun` (with region / tags), `GetRunStatus`, `Stop`, `Pause`, `Resume` |
-| History | `ListHistory`, `GetHistoryItem`, `CompareRuns` |
+| History | `ListHistory`, `ListHistoryFilters`, `GetHistoryItem`, `CompareRuns`, `DeleteRun` |
 | Regions | `ListRegions` |
 | Domains | `ListDomains` (deprecated alias: `List`), `Add`, `VerifyDns`, `VerifyHttp`, `Remove` |
-| Captures | `Analyse`, `ImportCapture` |
+| Captures | `Analyse`, `ImportCapture`, `AnalyseRemoteCapture`, `ImportRemoteCapture` |
+| Capture sources | `ListCaptureSources`, `ListCaptureSourceFiles` |
 | Variable sets | `ListVariablesSets`, `Create`, `Get`, `Rename`, `ChangeMode`, `Delete` |
 
 Each endpoint exposes both a raw `*http.Response` form and a typed `*WithResponse` form. Prefer the latter for status-code + body access in one struct — see [Decoding responses](#decoding-responses) for the pattern.
