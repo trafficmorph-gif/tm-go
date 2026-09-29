@@ -235,9 +235,10 @@ Endpoint coverage matches the server's `/api/v1` endpoints 1:1:
 | Tag | Methods |
 |---|---|
 | Profiles | `ListProfiles`, `CreateProfile`, `GetProfile`, `UpdateProfile`, `DeleteProfile` |
-| Runs | `Start`, `Stop`, `Pause`, `Resume` |
-| History | `ListHistory`, `GetHistoryItem` |
-| Domains | `ListDomains`, `Add`, `VerifyDns`, `VerifyHttp`, `Remove` |
+| Runs | `Start`, `StartRun` (with region / tags), `GetRunStatus`, `Stop`, `Pause`, `Resume` |
+| History | `ListHistory`, `GetHistoryItem`, `CompareRuns` |
+| Regions | `ListRegions` |
+| Domains | `ListDomains` (deprecated alias: `List`), `Add`, `VerifyDns`, `VerifyHttp`, `Remove` |
 | Captures | `Analyse`, `ImportCapture` |
 | Variable sets | `ListVariablesSets`, `Create`, `Get`, `Rename`, `ChangeMode`, `Delete` |
 
